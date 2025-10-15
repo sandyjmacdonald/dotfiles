@@ -4,6 +4,9 @@ set -euo pipefail
 OS="$(uname -s)"
 echo "==> dev-setup: starting on $OS..."
 
+# Uncomment to debug
+# [[ "${DEBUG:-0}" == "1" ]] && set -x
+
 # ----------------------------
 # Homebrew (macOS only; Linux uses binaries below)
 # ----------------------------
@@ -22,54 +25,68 @@ if [[ "$OS" == "Darwin" ]]; then
 fi
 
 # ----------------------------
-# Helper functions (Linux)
+# Helpers
 # ----------------------------
-install_tar_gz_bin () {  # name url pattern [subdir]
-  local name="$1" url="$2" pattern="$3" sub="${4:-}"
-  local tmp; tmp="$(mktemp -d)"
+ensure_local_paths() {
+  [[ ":$PATH:" != *":$HOME/.local/bin:"* ]] && export PATH="$HOME/.local/bin:$PATH"
   mkdir -p "$HOME/.local/bin" "$HOME/.local/opt"
-  curl -fsSL "$url" -o "$tmp/pkg.tgz"
-  tar -xzf "$tmp/pkg.tgz" -C "$tmp"
-  [[ -n "$sub" ]] && tmp="$tmp/$sub"
-  local bin; bin="$(find "$tmp" -type f -name "$pattern" | head -n1)"
-  chmod +x "$bin"
-  cp "$bin" "$HOME/.local/bin/"
-  echo "-> $name installed: $HOME/.local/bin/$(basename "$bin")"
 }
 
-install_tar_xz_bin () {  # name url pattern [subdir]
-  local name="$1" url="$2" pattern="$3" sub="${4:-}"
+download_first() { # name url1 [url2 ...]  -> echoes chosen file path
+  local name="$1"; shift
   local tmp; tmp="$(mktemp -d)"
-  mkdir -p "$HOME/.local/bin" "$HOME/.local/opt"
-  curl -fsSL "$url" -o "$tmp/pkg.txz"
-  tar -xJf "$tmp/pkg.txz" -C "$tmp"
-  [[ -n "$sub" ]] && tmp="$tmp/$sub"
-  local bin; bin="$(find "$tmp" -type f -name "$pattern" | head -n1)"
-  chmod +x "$bin"
-  cp "$bin" "$HOME/.local/bin/"
-  echo "-> $name installed: $HOME/.local/bin/$(basename "$bin")"
+  local url out="$tmp/pkg"
+  for url in "$@"; do
+    echo "-> [$name] trying: $url"
+    if curl -fSL "$url" -o "$out" 2>/dev/null; then
+      echo "$out"
+      return 0
+    fi
+  done
+  echo "!! [$name] all candidate URLs failed (404 or network). Check version/asset names." >&2
+  exit 22
 }
 
-install_zip_bin () {  # name url pattern [subdir]
-  local name="$1" url="$2" pattern="$3" sub="${4:-}"
+install_single_binary_from_tar() { # name pattern (tar will autodetect compression)
+  local name="$1" pattern="$2" tarfile="$3"
   local tmp; tmp="$(mktemp -d)"
-  mkdir -p "$HOME/.local/bin" "$HOME/.local/opt"
-  curl -fsSL "$url" -o "$tmp/pkg.zip"
-  unzip -q "$tmp/pkg.zip" -d "$tmp"
-  [[ -n "$sub" ]] && tmp="$tmp/$sub"
-  local bin; bin="$(find "$tmp" -type f -name "$pattern" | head -n1)"
+  # auto-detect compression flags
+  case "$tarfile" in
+    *.tar.gz|*.tgz)   tar -xzf "$tarfile" -C "$tmp" ;;
+    *.tar.xz|*.txz)   tar -xJf "$tarfile" -C "$tmp" ;;
+    *.tar.bz2|*.tbz)  tar -xjf "$tarfile" -C "$tmp" ;;  # NOTE: btop uses .tbz
+    *)                # fall back: try gzip then xz then bzip2
+                      tar -xzf "$tarfile" -C "$tmp" 2>/dev/null || \
+                      tar -xJf "$tarfile" -C "$tmp" 2>/dev/null || \
+                      tar -xjf "$tarfile" -C "$tmp" 2>/dev/null
+                      ;;
+  esac
+  local bin; bin="$(find "$tmp" -type f -name "$pattern" | head -n1 || true)"
+  if [[ -z "${bin:-}" ]]; then
+    echo "!! [$name] could not find '$pattern' inside archive." >&2
+    exit 23
+  fi
   chmod +x "$bin"
   cp "$bin" "$HOME/.local/bin/"
-  echo "-> $name installed: $HOME/.local/bin/$(basename "$bin")"
+  echo "-> [$name] installed: $HOME/.local/bin/$(basename "$bin")"
 }
 
-# Ensure ~/.local/bin on PATH immediately
-if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
-  export PATH="$HOME/.local/bin:$PATH"
-fi
+install_single_binary_from_zip() { # name pattern zipfile
+  local name="$1" pattern="$2" zipfile="$3"
+  local tmp; tmp="$(mktemp -d)"
+  unzip -q "$zipfile" -d "$tmp"
+  local bin; bin="$(find "$tmp" -type f -name "$pattern" | head -n1 || true)"
+  if [[ -z "${bin:-}" ]]; then
+    echo "!! [$name] could not find '$pattern' in zip." >&2
+    exit 24
+  fi
+  chmod +x "$bin"
+  cp "$bin" "$HOME/.local/bin/"
+  echo "-> [$name] installed: $HOME/.local/bin/$(basename "$bin")"
+}
 
 # ----------------------------
-# macOS installs via Homebrew
+# macOS via Homebrew
 # ----------------------------
 if [[ "$OS" == "Darwin" ]]; then
   # Fonts
@@ -86,147 +103,148 @@ if [[ "$OS" == "Darwin" ]]; then
 
   # fzf keybindings
   if [[ -x "$(brew --prefix)/opt/fzf/install" ]]; then
-    "$(brew --prefix)/opt/fzf/install" --key-bindings --completion --no-bash --no-fish --no-update-rc || true
+    "$(brew --prefix)"/opt/fzf/install --key-bindings --completion --no-bash --no-fish --no-update-rc || true
   fi
 
-else
+  echo "==> dev-setup complete (macOS)."
+  exit 0
+fi
+
 # ----------------------------
-# Linux installs via upstream binaries (HPC-friendly)
+# Linux (HPC-friendly) via upstream binaries
 # ----------------------------
+echo "==> Installing Linux user-local binaries into ~/.local/bin"
+ensure_local_paths
 
-  echo "==> Installing Linux user-local binaries into ~/.local/bin"
+ARCH="x86_64-unknown-linux-gnu"   # your cluster arch; adjust if needed
+NVIM_VER="v0.9.5"
+RG_VER="14.1.0"
+FD_VER="10.2.0"
+BAT_VER="0.24.0"
+FZF_VER="0.55.0"
+EZA_VER="0.18.16"
+BTOP_VER="1.3.2"
+YAZI_VER="0.2.5"
+DUF_VER="0.8.1"
+DUST_VER="0.8.6"
+STARSHIP_VER="1.20.1"
+ZOXIDE_VER="0.9.6"
+LAZYGIT_VER="0.44.1"
+GPING_VER="1.15.2"
 
-  # Versions
-  NVIM_VER="v0.9.5"                  # AppImage for glibc 2.28
-  RG_VER="14.1.0"
-  FD_VER="10.2.0"
-  BAT_VER="0.24.0"
-  FZF_VER="0.55.0"
-  EZA_VER="0.18.16"
-  BTOP_VER="1.3.2"
-  YAZI_VER="0.2.5"
-  DUF_VER="0.8.1"
-  DUST_VER="0.8.6"
-  STARSHIP_VER="1.20.1"
-  ZOXIDE_VER="0.9.6"
-  LAZYGIT_VER="0.44.1"
-  GPING_VER="1.15.2"
-
-  # Neovim (AppImage, extracted to avoid FUSE)
-  if ! command -v nvim >/dev/null 2>&1; then
-    echo "==> Installing Neovim $NVIM_VER AppImage (extracted)"
-    mkdir -p "$HOME/.local/opt/nvim-appimage"
-    cd "$HOME/.local/opt/nvim-appimage"
-    curl -fsSL -O "https://github.com/neovim/neovim/releases/download/${NVIM_VER}/nvim.appimage"
+# --- Neovim (AppImage, extracted) ---
+if ! command -v nvim >/dev/null 2>&1; then
+  echo "==> Installing Neovim ${NVIM_VER} AppImage (extracted)"
+  mkdir -p "$HOME/.local/opt/nvim-appimage"
+  cd "$HOME/.local/opt/nvim-appimage"
+  if [[ ! -f nvim.appimage ]]; then
+    curl -fSLo nvim.appimage "https://github.com/neovim/neovim/releases/download/${NVIM_VER}/nvim.appimage"
     chmod +x nvim.appimage
     ./nvim.appimage --appimage-extract
     ln -sfn "$PWD/squashfs-root/usr/bin/nvim" "$HOME/.local/bin/nvim"
   fi
-
-  # ripgrep
-  install_tar_gz_bin "ripgrep" \
-    "https://github.com/BurntSushi/ripgrep/releases/download/${RG_VER}/ripgrep-${RG_VER}-x86_64-unknown-linux-gnu.tar.gz" \
-    "rg" "ripgrep-${RG_VER}-x86_64-unknown-linux-gnu"
-
-  # fd
-  install_tar_gz_bin "fd" \
-    "https://github.com/sharkdp/fd/releases/download/v${FD_VER}/fd-v${FD_VER}-x86_64-unknown-linux-gnu.tar.gz" \
-    "fd" "fd-v${FD_VER}-x86_64-unknown-linux-gnu"
-
-  # bat
-  install_tar_gz_bin "bat" \
-    "https://github.com/sharkdp/bat/releases/download/v${BAT_VER}/bat-v${BAT_VER}-x86_64-unknown-linux-gnu.tar.gz" \
-    "bat" "bat-v${BAT_VER}-x86_64-unknown-linux-gnu"
-
-  # fzf (single binary tar.gz)
-  install_tar_gz_bin "fzf" \
-    "https://github.com/junegunn/fzf/releases/download/${FZF_VER}/fzf-${FZF_VER}-linux_amd64.tar.gz" \
-    "fzf"
-
-  # eza
-  install_tar_gz_bin "eza" \
-    "https://github.com/eza-community/eza/releases/download/v${EZA_VER}/eza_x86_64-unknown-linux-gnu.tar.gz" \
-    "eza"
-
-  # btop (musl static tbz inside tar.gz sometimes; use .tbz release)
-  install_tar_xz_bin "btop" \
-    "https://github.com/aristocratos/btop/releases/download/v${BTOP_VER}/btop-x86_64-linux-musl.tbz" \
-    "btop"
-
-  # yazi
-  install_zip_bin "yazi" \
-    "https://github.com/sxyazi/yazi/releases/download/v${YAZI_VER}/yazi-x86_64-unknown-linux-gnu.zip" \
-    "yazi"
-
-  # duf
-  install_tar_gz_bin "duf" \
-    "https://github.com/muesli/duf/releases/download/v${DUF_VER}/duf_${DUF_VER}_Linux_x86_64.tar.gz" \
-    "duf"
-
-  # dust
-  install_tar_gz_bin "dust" \
-    "https://github.com/bootandy/dust/releases/download/v${DUST_VER}/dust-v${DUST_VER}-x86_64-unknown-linux-gnu.tar.gz" \
-    "dust"
-
-  # starship
-  install_tar_gz_bin "starship" \
-    "https://github.com/starship/starship/releases/download/v${STARSHIP_VER}/starship-x86_64-unknown-linux-gnu.tar.gz" \
-    "starship"
-
-  # zoxide
-  install_tar_gz_bin "zoxide" \
-    "https://github.com/ajeetdsouza/zoxide/releases/download/v${ZOXIDE_VER}/zoxide-${ZOXIDE_VER}-x86_64-unknown-linux-gnu.tar.gz" \
-    "zoxide"
-
-  # lazygit
-  install_tar_gz_bin "lazygit" \
-    "https://github.com/jesseduffield/lazygit/releases/download/v${LAZYGIT_VER}/lazygit_${LAZYGIT_VER}_Linux_x86_64.tar.gz" \
-    "lazygit"
-
-  # gping
-  install_tar_gz_bin "gping" \
-    "https://github.com/orf/gping/releases/download/v${GPING_VER}/gping-Linux-x86_64.tar.gz" \
-    "gping"
-
-  # tmux: prefer site module if available; otherwise try upstream static build
-  if ! command -v tmux >/dev/null 2>&1; then
-    if command -v module >/dev/null 2>&1 && module avail tmux &>/dev/null; then
-      module load tmux || true
-    else
-      echo "-> tmux not found; install via site modules, or ask and I’ll add a static tmux step."
-    fi
-  fi
-
-fi # end Linux block
-
-# ----------------------------
-# fzf keybindings & completions
-# ----------------------------
-echo "==> Enabling fzf keybindings & completions..."
-if command -v fzf >/dev/null 2>&1; then
-  # Minimal: add shell integration snippet if not present
-  if [[ "$OS" == "Darwin" && -x "$(brew --prefix)/opt/fzf/install" ]]; then
-    "$(brew --prefix)"/opt/fzf/install --key-bindings --completion --no-bash --no-fish --no-update-rc || true
-  else
-    # Write zsh snippets that many distros use (~/.fzf.zsh) if you want, or rely on your zshrc sourcing it via brew when on macOS.
-    :
-  fi
-else
-  echo "-> Skipping fzf keybindings: fzf not installed."
 fi
 
-# ----------------------------
-# LazyVim bootstrap (optional)
-# ----------------------------
-if [[ "${INSTALL_LAZYVIM:-0}" == "1" ]]; then
-  echo "==> Installing LazyVim starter config..."
-  mkdir -p ~/.config
-  if [[ -d ~/.config/nvim ]]; then
-    ts="$(date +%Y%m%d-%H%M%S)"
-    mv ~/.config/nvim ~/.config/nvim.bak-$ts
-  fi
-  git clone https://github.com/LazyVim/starter ~/.config/nvim
-  rm -rf ~/.config/nvim/.git
+# --- ripgrep ---
+if ! command -v rg >/dev/null 2>&1; then
+  F="$(download_first rg \
+      "https://github.com/BurntSushi/ripgrep/releases/download/${RG_VER}/ripgrep-${RG_VER}-${ARCH}.tar.gz" \
+      "https://github.com/BurntSushi/ripgrep/releases/download/${RG_VER}/ripgrep-${RG_VER}-x86_64-unknown-linux-musl.tar.gz")"
+  install_single_binary_from_tar "ripgrep" "rg" "$F"
 fi
 
-echo "==> dev-setup complete."
+# --- fd ---
+if ! command -v fd >/dev/null 2>&1; then
+  F="$(download_first fd \
+      "https://github.com/sharkdp/fd/releases/download/v${FD_VER}/fd-v${FD_VER}-${ARCH}.tar.gz" \
+      "https://github.com/sharkdp/fd/releases/download/v${FD_VER}/fd-v${FD_VER}-x86_64-unknown-linux-musl.tar.gz")"
+  install_single_binary_from_tar "fd" "fd" "$F"
+fi
+
+# --- bat ---
+if ! command -v bat >/dev/null 2>&1; then
+  F="$(download_first bat \
+      "https://github.com/sharkdp/bat/releases/download/v${BAT_VER}/bat-v${BAT_VER}-${ARCH}.tar.gz" \
+      "https://github.com/sharkdp/bat/releases/download/v${BAT_VER}/bat-v${BAT_VER}-x86_64-unknown-linux-musl.tar.gz")"
+  install_single_binary_from_tar "bat" "bat" "$F"
+fi
+
+# --- fzf ---
+if ! command -v fzf >/dev/null 2>&1; then
+  F="$(download_first fzf \
+      "https://github.com/junegunn/fzf/releases/download/${FZF_VER}/fzf-${FZF_VER}-linux_amd64.tar.gz")"
+  install_single_binary_from_tar "fzf" "fzf" "$F"
+fi
+
+# --- eza ---
+if ! command -v eza >/dev/null 2>&1; then
+  F="$(download_first eza \
+      "https://github.com/eza-community/eza/releases/download/v${EZA_VER}/eza_${ARCH}.tar.gz" \
+      "https://github.com/eza-community/eza/releases/download/v${EZA_VER}/eza_x86_64-unknown-linux-musl.tar.gz")"
+  install_single_binary_from_tar "eza" "eza" "$F"
+fi
+
+# --- btop (.tbz) ---
+if ! command -v btop >/dev/null 2>&1; then
+  F="$(download_first btop \
+      "https://github.com/aristocratos/btop/releases/download/v${BTOP_VER}/btop-x86_64-linux-musl.tbz" \
+      "https://github.com/aristocratos/btop/releases/download/v${BTOP_VER}/btop-x86_64-linux-gnu.tbz")"
+  install_single_binary_from_tar "btop" "btop" "$F"
+fi
+
+# --- yazi (zip) ---
+if ! command -v yazi >/dev/null 2>&1; then
+  F="$(download_first yazi \
+      "https://github.com/sxyazi/yazi/releases/download/v${YAZI_VER}/yazi-x86_64-unknown-linux-gnu.zip" \
+      "https://github.com/sxyazi/yazi/releases/download/v${YAZI_VER}/yazi-x86_64-unknown-linux-musl.zip")"
+  install_single_binary_from_zip "yazi" "yazi" "$F"
+fi
+
+# --- duf ---
+if ! command -v duf >/dev/null 2>&1; then
+  F="$(download_first duf \
+      "https://github.com/muesli/duf/releases/download/v${DUF_VER}/duf_${DUF_VER}_Linux_x86_64.tar.gz")"
+  install_single_binary_from_tar "duf" "duf" "$F"
+fi
+
+# --- dust ---
+if ! command -v dust >/dev/null 2>&1; then
+  F="$(download_first dust \
+      "https://github.com/bootandy/dust/releases/download/v${DUST_VER}/dust-v${DUST_VER}-${ARCH}.tar.gz" \
+      "https://github.com/bootandy/dust/releases/download/v${DUST_VER}/dust-v${DUST_VER}-x86_64-unknown-linux-musl.tar.gz")"
+  install_single_binary_from_tar "dust" "dust" "$F"
+fi
+
+# --- starship ---
+if ! command -v starship >/dev/null 2>&1; then
+  F="$(download_first starship \
+      "https://github.com/starship/starship/releases/download/v${STARSHIP_VER}/starship-${ARCH}.tar.gz" \
+      "https://github.com/starship/starship/releases/download/v${STARSHIP_VER}/starship-x86_64-unknown-linux-musl.tar.gz")"
+  install_single_binary_from_tar "starship" "starship" "$F"
+fi
+
+# --- zoxide ---
+if ! command -v zoxide >/dev/null 2>&1; then
+  F="$(download_first zoxide \
+      "https://github.com/ajeetdsouza/zoxide/releases/download/v${ZOXIDE_VER}/zoxide-${ZOXIDE_VER}-${ARCH}.tar.gz" \
+      "https://github.com/ajeetdsouza/zoxide/releases/download/v${ZOXIDE_VER}/zoxide-${ZOXIDE_VER}-x86_64-unknown-linux-musl.tar.gz")"
+  install_single_binary_from_tar "zoxide" "zoxide" "$F"
+fi
+
+# --- lazygit ---
+if ! command -v lazygit >/dev/null 2>&1; then
+  F="$(download_first lazygit \
+      "https://github.com/jesseduffield/lazygit/releases/download/v${LAZYGIT_VER}/lazygit_${LAZYGIT_VER}_Linux_x86_64.tar.gz")"
+  install_single_binary_from_tar "lazygit" "lazygit" "$F"
+fi
+
+# --- gping (asset names vary, try both) ---
+if ! command -v gping >/dev/null 2>&1; then
+  F="$(download_first gping \
+      "https://github.com/orf/gping/releases/download/v${GPING_VER}/gping-Linux-x86_64.tar.gz" \
+      "https://github.com/orf/gping/releases/download/v${GPING_VER}/gping-${ARCH}.tar.gz" \
+      "https://github.com/orf/gping/releases/download/v${GPING_VER}/gping-x86_64-unknown-linux-gnu.tar.gz")"
+  install_single_binary_from_tar "gping" "gping" "$F"
+fi
+
+echo "==> dev-setup complete (Linux)."
