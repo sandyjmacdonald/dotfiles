@@ -1,0 +1,24 @@
+[user]
+	email = sandyjmacdonald@gmail.com
+	name = sandyjmacdonald
+
+[push]
+	default = current
+
+[core]
+    editor = nvim
+    autocrlf = input
+    pager = less -FRX
+
+[init]
+    defaultBranch = main
+
+[merge]
+    conflictstyle = diff3
+
+[pull]
+    rebase = false
+
+[color]
+    ui = auto
+

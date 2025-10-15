@@ -1,0 +1,9 @@
+theme = Catppuccin Mocha
+
+# Enable Ghostty’s shell integration (auto-injected for zsh/bash/fish in most setups)
+shell-integration = zsh
+
+# 1) Try to copy Ghostty terminfo to the remote on first SSH to a host
+# 2) If that fails, fall back to TERM=xterm-256color for compatibility
+shell-integration-features = ssh-terminfo,ssh-env
+
