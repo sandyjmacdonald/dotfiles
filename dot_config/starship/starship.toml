@@ -1,0 +1,20 @@
+# Minimal, readable
+add_newline = false
+
+[directory]
+truncation_length = 3
+
+[cmd_duration]
+min_time = 10000
+format = "took [$duration]($style)"
+
+[nodejs]
+symbol = " "
+format = "via [$symbol$version]($style) "
+
+[python]
+symbol = "🐍 "
+format = "via [$symbol$version]($style) "
+detect_extensions = ["py"]
+detect_files = ["requirements.txt", "pyproject.toml", "Pipfile"]
+detect_folders = [".venv", "venv"]

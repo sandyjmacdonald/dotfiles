@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+OS="$(uname -s)"
+echo "==> dev-setup: starting on $OS..."
+
+# ----------------------------
+# Homebrew (macOS: standard; Linux: user-local clone)
+# ----------------------------
+if ! command -v brew >/dev/null 2>&1; then
+  if [[ "$OS" == "Darwin" ]]; then
+    echo "==> Installing Homebrew (macOS)..."
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+  else
+    echo "==> Installing Homebrew (Linux, user-local ~/.linuxbrew)..."
+    export HOMEBREW_PREFIX="$HOME/.linuxbrew"
+    export HOMEBREW_REPOSITORY="$HOMEBREW_PREFIX/Homebrew"
+    export HOMEBREW_CELLAR="$HOMEBREW_PREFIX/Cellar"
+    mkdir -p "$HOMEBREW_PREFIX"/{bin,Cellar}
+    if [[ ! -d "$HOMEBREW_REPOSITORY" ]]; then
+      git clone --depth=1 https://github.com/Homebrew/brew "$HOMEBREW_REPOSITORY"
+    fi
+    ln -sf "$HOMEBREW_REPOSITORY/bin/brew" "$HOMEBREW_PREFIX/bin/brew"
+    export PATH="$HOMEBREW_PREFIX/bin:$PATH"
+    # Also export for current shell
+    eval "$("$HOMEBREW_PREFIX/bin/brew" shellenv)"
+    export HOMEBREW_NO_ANALYTICS=1
+    export HOMEBREW_NO_INSTALL_CLEANUP=1
+  fi
+fi
+
+# Ensure brew on PATH for this script
+if [[ "$OS" == "Darwin" ]]; then
+  if [[ -d "/opt/homebrew/bin" ]]; then
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+  elif [[ -d "/usr/local/bin" ]]; then
+    eval "$(/usr/local/bin/brew shellenv)"
+  else
+    eval "$(brew shellenv)"
+  fi
+else
+  # Linux user-local
+  export HOMEBREW_PREFIX="${HOMEBREW_PREFIX:-$HOME/.linuxbrew}"
+  eval "$("$HOMEBREW_PREFIX/bin/brew" shellenv)"
+fi
+
+echo "==> brew update..."
+brew update || true
+
+if [[ "$OS" == "Darwin" ]]; then
+  echo "==> Installing Nerd Font (for icons in prompts/TUIs)..."
+  brew install --cask font-jetbrains-mono-nerd-font || true
+fi
+
+echo "==> Installing CLI tools..."
+
+brew install \
+  neovim \
+  git \
+  fzf \
+  bat \
+  fd \
+  ripgrep \
+  zoxide \
+  lazygit \
+  btop \
+  starship \
+  tldr \
+  eza \
+  yazi \
+  dust \
+  duf \
+  jq \
+  csvkit \
+  gping \
+  tmux \
+  zsh-autosuggestions \
+  zsh-syntax-highlighting \
+  zsh-history-substring-search \
+  doggo
+
+if [[ "$OS" == "Darwin" ]]; then
+  echo "==> Installing Nerd Font (macOS only)..."
+  brew install --cask font-jetbrains-mono-nerd-font || true
+fi
+
+# Linux clipboard helpers (not needed on macOS)
+if [[ "$OS" != "Darwin" ]]; then
+  brew install xclip wl-clipboard || true
+fi
+
+echo "==> Enabling fzf keybindings & completions..."
+"$(brew --prefix)"/opt/fzf/install --key-bindings --completion --no-bash --no-fish --no-update-rc || true
+
+# Optional: LazyVim bootstrap if requested
+if [[ "${INSTALL_LAZYVIM:-0}" == "1" ]]; then
+  echo "==> Installing LazyVim starter config..."
+  mkdir -p ~/.config
+  if [[ -d ~/.config/nvim ]]; then
+    ts="$(date +%Y%m%d-%H%M%S)"
+    mv ~/.config/nvim ~/.config/nvim.bak-$ts
+  fi
+  git clone https://github.com/LazyVim/starter ~/.config/nvim
+  rm -rf ~/.config/nvim/.git
+fi
+
+echo "==> dev-setup complete."
