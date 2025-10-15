@@ -88,7 +88,7 @@ if [[ "$OS" != "Darwin" ]]; then
 fi
 
 # ----------------------------
-# Neovim setup
+# Neovim setup (AppImage on older glibc)
 # ----------------------------
 if [[ "$OS" == "Darwin" ]]; then
   echo "==> Installing Neovim (macOS, via Homebrew)..."
@@ -98,19 +98,26 @@ else
   GLIBC_VER="$(getconf GNU_LIBC_VERSION | awk '{print $2}')"
   echo "glibc: $GLIBC_VER"
 
-  if printf '%s\n' "2.29" "$GLIBC_VER" | sort -V -C; then
-    # system glibc < 2.29
-    echo "==> glibc < 2.29 — installing Neovim AppImage v0.9.5 (compatible build)"
-    mkdir -p "$HOME/.local/opt/nvim-appimage" "$HOME/.local/bin"
-    cd "$HOME/.local/opt/nvim-appimage"
-    if [[ ! -f nvim.appimage ]]; then
-      curl -LO https://github.com/neovim/neovim/releases/download/v0.9.5/nvim.appimage
-      chmod +x nvim.appimage
-      ./nvim.appimage --appimage-extract || true
-      ln -sfn "$PWD/squashfs-root/usr/bin/nvim" "$HOME/.local/bin/nvim"
+  # version_lt A B => true if A < B
+  version_lt() { [ "$(printf '%s\n' "$1" "$2" | sort -V | head -n1)" != "$2" ]; }
+
+  if version_lt "$GLIBC_VER" "2.29"; then
+    echo "==> glibc < 2.29 — installing Neovim AppImage v0.9.5 (compatible)"
+    if ! command -v nvim >/dev/null 2>&1; then
+      mkdir -p "$HOME/.local/opt/nvim-appimage" "$HOME/.local/bin"
+      cd "$HOME/.local/opt/nvim-appimage"
+      if [[ ! -f nvim.appimage ]]; then
+        curl -fsSL -O https://github.com/neovim/neovim/releases/download/v0.9.5/nvim.appimage
+        chmod +x nvim.appimage
+        # Extract to avoid FUSE requirement
+        ./nvim.appimage --appimage-extract
+        ln -sfn "$PWD/squashfs-root/usr/bin/nvim" "$HOME/.local/bin/nvim"
+      fi
+    else
+      echo "-> Neovim already present at $(command -v nvim)"
     fi
   else
-    echo "==> glibc ≥ 2.29 — installing Neovim from Homebrew..."
+    echo "==> glibc >= 2.29 — installing Neovim via Homebrew"
     brew install neovim
   fi
 fi
