@@ -86,7 +86,7 @@ else
 
   # btop 1.4.5 (static musl)
   tmpd="$(mktemp -d)"
-  curl -fsSL "https://downloads.sourceforge.net/project/btop/btop/1.4.5/btop-x86_64-linux-musl.tbz" -o "$tmpd/btop.tbz"
+  curl -fsSL "https://sourceforge.net/projects/btop.mirror/files/v1.4.5/btop-x86_64-linux-musl.tbz/download" -o "$tmpd/btop.tbz"
   tar -xjf "$tmpd/btop.tbz" -C "$tmpd"
   install -m 0755 "$tmpd/btop/bin/btop" "$HOME/.local/bin/btop"
   rm -rf "$tmpd"
