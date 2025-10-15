@@ -5,14 +5,14 @@ OS="$(uname -s)"
 echo "==> dev-setup: starting on $OS..."
 
 # ----------------------------
-# Homebrew (macOS: standard; Linux: user-local clone)
+# Homebrew setup
 # ----------------------------
 if ! command -v brew >/dev/null 2>&1; then
   if [[ "$OS" == "Darwin" ]]; then
     echo "==> Installing Homebrew (macOS)..."
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
   else
-    echo "==> Installing Homebrew (Linux, user-local ~/.linuxbrew)..."
+    echo "==> Installing Homebrew (Linux user-local ~/.linuxbrew)..."
     export HOMEBREW_PREFIX="$HOME/.linuxbrew"
     export HOMEBREW_REPOSITORY="$HOMEBREW_PREFIX/Homebrew"
     export HOMEBREW_CELLAR="$HOMEBREW_PREFIX/Cellar"
@@ -22,24 +22,20 @@ if ! command -v brew >/dev/null 2>&1; then
     fi
     ln -sf "$HOMEBREW_REPOSITORY/bin/brew" "$HOMEBREW_PREFIX/bin/brew"
     export PATH="$HOMEBREW_PREFIX/bin:$PATH"
-    # Also export for current shell
     eval "$("$HOMEBREW_PREFIX/bin/brew" shellenv)"
     export HOMEBREW_NO_ANALYTICS=1
     export HOMEBREW_NO_INSTALL_CLEANUP=1
   fi
 fi
 
-# Ensure brew on PATH for this script
+# ensure brew on PATH
 if [[ "$OS" == "Darwin" ]]; then
   if [[ -d "/opt/homebrew/bin" ]]; then
     eval "$(/opt/homebrew/bin/brew shellenv)"
   elif [[ -d "/usr/local/bin" ]]; then
     eval "$(/usr/local/bin/brew shellenv)"
-  else
-    eval "$(brew shellenv)"
   fi
 else
-  # Linux user-local
   export HOMEBREW_PREFIX="${HOMEBREW_PREFIX:-$HOME/.linuxbrew}"
   eval "$("$HOMEBREW_PREFIX/bin/brew" shellenv)"
 fi
@@ -47,15 +43,22 @@ fi
 echo "==> brew update..."
 brew update || true
 
+# ----------------------------
+# Fonts (macOS only)
+# ----------------------------
 if [[ "$OS" == "Darwin" ]]; then
   echo "==> Installing Nerd Font (for icons in prompts/TUIs)..."
+  brew tap homebrew/cask-fonts || true
   brew install --cask font-jetbrains-mono-nerd-font || true
 fi
 
+# ----------------------------
+# CLI tools (common)
+# ----------------------------
 echo "==> Installing CLI tools..."
 
+# core set (both macOS + Linux)
 brew install \
-  neovim \
   git \
   fzf \
   bat \
@@ -77,22 +80,51 @@ brew install \
   zsh-autosuggestions \
   zsh-syntax-highlighting \
   zsh-history-substring-search \
-  doggo
+  doggo || true
 
-if [[ "$OS" == "Darwin" ]]; then
-  echo "==> Installing Nerd Font (macOS only)..."
-  brew install --cask font-jetbrains-mono-nerd-font || true
-fi
-
-# Linux clipboard helpers (not needed on macOS)
+# Linux clipboard helpers
 if [[ "$OS" != "Darwin" ]]; then
   brew install xclip wl-clipboard || true
 fi
 
-echo "==> Enabling fzf keybindings & completions..."
-"$(brew --prefix)"/opt/fzf/install --key-bindings --completion --no-bash --no-fish --no-update-rc || true
+# ----------------------------
+# Neovim setup
+# ----------------------------
+if [[ "$OS" == "Darwin" ]]; then
+  echo "==> Installing Neovim (macOS, via Homebrew)..."
+  brew install neovim
+else
+  echo "==> Checking glibc version..."
+  GLIBC_VER="$(getconf GNU_LIBC_VERSION | awk '{print $2}')"
+  echo "glibc: $GLIBC_VER"
 
-# Optional: LazyVim bootstrap if requested
+  if printf '%s\n' "2.29" "$GLIBC_VER" | sort -V -C; then
+    # system glibc < 2.29
+    echo "==> glibc < 2.29 — installing Neovim AppImage v0.9.5 (compatible build)"
+    mkdir -p "$HOME/.local/opt/nvim-appimage" "$HOME/.local/bin"
+    cd "$HOME/.local/opt/nvim-appimage"
+    if [[ ! -f nvim.appimage ]]; then
+      curl -LO https://github.com/neovim/neovim/releases/download/v0.9.5/nvim.appimage
+      chmod +x nvim.appimage
+      ./nvim.appimage --appimage-extract || true
+      ln -sfn "$PWD/squashfs-root/usr/bin/nvim" "$HOME/.local/bin/nvim"
+    fi
+  else
+    echo "==> glibc ≥ 2.29 — installing Neovim from Homebrew..."
+    brew install neovim
+  fi
+fi
+
+# ----------------------------
+# fzf keybindings & completions
+# ----------------------------
+echo "==> Enabling fzf keybindings & completions..."
+"$(brew --prefix)"/opt/fzf/install \
+  --key-bindings --completion --no-bash --no-fish --no-update-rc || true
+
+# ----------------------------
+# LazyVim bootstrap (optional)
+# ----------------------------
 if [[ "${INSTALL_LAZYVIM:-0}" == "1" ]]; then
   echo "==> Installing LazyVim starter config..."
   mkdir -p ~/.config
