@@ -44,7 +44,6 @@ if [[ "$OS" == "Darwin" ]]; then
     zsh-autosuggestions zsh-syntax-highlighting zsh-history-substring-search doggo || true
 
   echo "==> Installing Nerd Font (for icons/TUIs)..."
-  brew tap homebrew/cask-fonts || true
   brew install --cask font-jetbrains-mono-nerd-font || true
 
   echo "==> Enabling fzf keybindings & completion..."
