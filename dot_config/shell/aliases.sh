@@ -7,5 +7,6 @@ du() { command -v dust >/dev/null 2>&1 && dust "$@" || command du "$@"; }
 alias ls='eza -lah --git'
 alias cat='bat'
 alias grep='rg'
+alias top='btop'
 alias ..='cd ..'
 alias ...='cd ../..'
