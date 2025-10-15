@@ -114,9 +114,9 @@ else
     echo "-> Installed: $HOME/.local/bin/jq"
   fi
 
-  # starship (official script supports BIN_DIR)
+  # starship (official installer; install into ~/.local/bin)
   if ! command -v starship >/dev/null 2>&1; then
-    BIN_DIR="$HOME/.local/bin" sh -c "$(curl -fsSL https://starship.rs/install.sh)" -s -- -y
+    curl -fsSL https://starship.rs/install.sh | sh -s -- -y -b "$HOME/.local/bin"
   fi
 
   # zoxide 0.9.8 (musl = portable)
