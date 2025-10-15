@@ -1,0 +1,3 @@
+# Minimal only: put user bins first
+export PATH="$HOME/.local/bin:$HOME/bin:$PATH"
+export EDITOR="nvim"

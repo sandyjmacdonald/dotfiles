@@ -1,69 +1,37 @@
+# ~/.zshrc  (interactive-only stuff)
+
 # History
 HISTFILE=${HISTFILE:-$HOME/.zsh_history}
 HISTSIZE=100000
 SAVEHIST=100000
 
-# --- Homebrew env (portable) ---
-{{ if eq .chezmoi.os "darwin" -}}
-  {{- /* macOS */ -}}
-  if [ -x /opt/homebrew/bin/brew ]; then
-    eval "$(/opt/homebrew/bin/brew shellenv)"
-  elif [ -x /usr/local/bin/brew ]; then
-    eval "$(/usr/local/bin/brew shellenv)"
-  fi
-{{- else -}}
-  {{- /* Linux user-local */ -}}
-  if [ -x "$HOME/.linuxbrew/bin/brew" ]; then
-    eval "$("$HOME/.linuxbrew/bin/brew" shellenv)"
-  fi
-{{- end }}
-
-# Put brew’s zsh completions on FPATH
+# --- Completions path from Homebrew (already on PATH from zprofile) ---
 if command -v brew >/dev/null 2>&1; then
   FPATH="$(brew --prefix)/share/zsh/site-functions:${FPATH}"
 fi
 
-# Plugins (order matters): autosuggestions -> history-substring-search -> syntax-highlighting last
-if [ -f "$(brew --prefix)/share/zsh-autosuggestions/zsh-autosuggestions.zsh" ]; then
+# --- Plugins (order matters) ---
+# 1) autosuggestions
+[ -f "$(brew --prefix)/share/zsh-autosuggestions/zsh-autosuggestions.zsh" ] && \
   source "$(brew --prefix)/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
-fi
 
+# 2) history-substring-search (+ bindings)
 if [ -f "$(brew --prefix)/share/zsh-history-substring-search/zsh-history-substring-search.zsh" ]; then
   source "$(brew --prefix)/share/zsh-history-substring-search/zsh-history-substring-search.zsh"
   bindkey '^[[A' history-substring-search-up
   bindkey '^[[B' history-substring-search-down
 fi
 
-if [ -f "$(brew --prefix)/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ]; then
+# 3) syntax-highlighting LAST
+[ -f "$(brew --prefix)/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ] && \
   source "$(brew --prefix)/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
-fi
 
-# Aliases (safe)
-alias ls='eza -lah --git'
-alias cat='bat'
-alias grep='rg'
-alias df='duf'
-alias du='dust'
-alias top='btop'
-alias ..='cd ..'; alias ...='cd ../..'
+# fzf keybindings/completions (if installed)
+[ -f "$HOME/.fzf.zsh" ] && source "$HOME/.fzf.zsh"
 
-# Tools init
-if command -v zoxide >/dev/null 2>&1; then eval "$(zoxide init zsh)"; fi
-if command -v starship >/dev/null 2>&1; then eval "$(starship init zsh)"; fi
-[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+# Prompt & navigation
+command -v zoxide   >/dev/null 2>&1 && eval "$(zoxide init zsh)"
+command -v starship >/dev/null 2>&1 && eval "$(starship init zsh)"
 
-export EDITOR="nvim"
-
-# fzfp: fuzzy-pick a file (optionally pass a directory) -> open in nvim
-fzfp() {
-  local dir="${1:-.}"
-  local file
-  file="$(fd --type f --hidden --follow --exclude .git . "$dir" | fzf --preview 'bat --style=numbers --color=always {} | head -500')"
-  [ -n "$file" ] && exec nvim "$file"
-}
-
-# y: quick launch yazi in given directory
-y() {
-  local dir="${1:-.}"
-  yazi "$dir"
-}
+# Shared aliases & functions (used by zsh AND bash)
+[ -f "$HOME/.config/shell/common.sh" ] && source "$HOME/.config/shell/common.sh"

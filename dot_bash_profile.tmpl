@@ -1,0 +1,37 @@
+# Bash login shells
+[ -f "$HOME/.profile" ] && . "$HOME/.profile"
+
+# Homebrew
+{{ if eq .chezmoi.os "darwin" -}}
+  if [ -x /opt/homebrew/bin/brew ]; then eval "$(/opt/homebrew/bin/brew shellenv)"; fi
+  if [ -x /usr/local/bin/brew ]; then eval "$(/usr/local/bin/brew shellenv)"; fi
+{{ else -}}
+  if [ -x "$HOME/.linuxbrew/bin/brew" ]; then eval "$("$HOME/.linuxbrew/bin/brew" shellenv)"; fi
+{{ end }}
+
+# Conda (optional)
+{{- if .conda_enabled -}}
+  {{ if eq .chezmoi.os "darwin" -}}
+    if [ -f "{{ (index .conda_prefix "darwin") }}/etc/profile.d/conda.sh" ]; then
+      . "{{ (index .conda_prefix "darwin") }}/etc/profile.d/conda.sh"
+    elif [ -x "{{ (index .conda_prefix "darwin") }}/bin/conda" ]; then
+      eval "$("{{ (index .conda_prefix "darwin") }}/bin/conda" shell.bash hook)"
+    fi
+  {{ else -}}
+    if [ -f "{{ (index .conda_prefix "linux") }}/etc/profile.d/conda.sh" ]; then
+      . "{{ (index .conda_prefix "linux") }}/etc/profile.d/conda.sh"
+    elif [ -x "{{ (index .conda_prefix "linux") }}/bin/conda" ]; then
+      eval "$("{{ (index .conda_prefix "linux") }}/bin/conda" shell.bash hook)"
+    fi
+  {{ end -}}
+{{- end }}
+
+# Cargo & SDKMAN
+[ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
+{{- if .sdkman_enabled -}}
+  export SDKMAN_DIR="$HOME/.sdkman"
+  [ -s "$HOME/.sdkman/bin/sdkman-init.sh" ] && . "$HOME/.sdkman/bin/sdkman-init.sh"
+{{- end }}
+
+# Finally, interactive settings
+[ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc"
