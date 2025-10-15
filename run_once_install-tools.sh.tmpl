@@ -38,7 +38,7 @@ if [[ "$OS" == "Darwin" ]]; then
 else
   export HOMEBREW_PREFIX="${HOMEBREW_PREFIX:-$HOME/.linuxbrew}"
   eval "$("$HOMEBREW_PREFIX/bin/brew" shellenv)"
-  # ---- Use cluster GCC for all Homebrew builds (avoid gcc-15) ----
+  # Prefer cluster GCC for any unavoidable builds (best effort)
   module unload gcc >/dev/null 2>&1 || true
   module load GCCcore/14.2.0 >/dev/null 2>&1 || module load GCC >/dev/null 2>&1 || true
   export CC="$(command -v gcc || echo /usr/bin/gcc)"
@@ -59,36 +59,59 @@ if [[ "$OS" == "Darwin" ]]; then
 fi
 
 # ----------------------------
-# CLI tools (common)
+# CLI tools (common), avoiding heavy source builds on Linux
 # ----------------------------
 echo "==> Installing CLI tools..."
-brew install \
-  git \
-  fzf \
-  bat \
-  fd \
-  ripgrep \
-  zoxide \
-  lazygit \
-  btop \
-  starship \
-  tldr \
-  eza \
-  yazi \
-  dust \
-  duf \
-  jq \
-  csvkit \
-  gping \
-  tmux \
-  zsh-autosuggestions \
-  zsh-syntax-highlighting \
-  zsh-history-substring-search \
-  doggo || true
 
-# Linux clipboard helpers
-if [[ "$OS" != "Darwin" ]]; then
-  brew install xclip clipboard || true
+if [[ "$OS" == "Darwin" ]]; then
+  # macOS list
+  brew install \
+    git \
+    fzf \
+    bat \
+    fd \
+    ripgrep \
+    zoxide \
+    lazygit \
+    btop \
+    starship \
+    tldr \
+    eza \
+    yazi \
+    dust \
+    duf \
+    jq \
+    csvkit \
+    gping \
+    tmux \
+    zsh-autosuggestions \
+    zsh-syntax-highlighting \
+    zsh-history-substring-search \
+    doggo || true
+else
+  # Linux list (skip git/xclip/wl-clipboard to avoid source builds)
+  brew install \
+    fzf \
+    bat \
+    fd \
+    ripgrep \
+    zoxide \
+    lazygit \
+    btop \
+    starship \
+    tldr \
+    eza \
+    yazi \
+    dust \
+    duf \
+    jq \
+    csvkit \
+    gping \
+    tmux \
+    zsh-autosuggestions \
+    zsh-syntax-highlighting \
+    zsh-history-substring-search \
+    doggo || true
 fi
 
 # ----------------------------
