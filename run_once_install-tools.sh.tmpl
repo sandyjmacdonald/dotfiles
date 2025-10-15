@@ -38,6 +38,12 @@ if [[ "$OS" == "Darwin" ]]; then
 else
   export HOMEBREW_PREFIX="${HOMEBREW_PREFIX:-$HOME/.linuxbrew}"
   eval "$("$HOMEBREW_PREFIX/bin/brew" shellenv)"
+  # ---- Use cluster GCC for all Homebrew builds (avoid gcc-15) ----
+  module unload gcc >/dev/null 2>&1 || true
+  module load GCCcore/14.2.0 >/dev/null 2>&1 || module load GCC >/dev/null 2>&1 || true
+  export CC="$(command -v gcc || echo /usr/bin/gcc)"
+  export CXX="$(dirname "${CC}")/g++"
+  export HOMEBREW_NO_ENV_FILTERING=1
 fi
 
 echo "==> brew update..."
@@ -56,8 +62,6 @@ fi
 # CLI tools (common)
 # ----------------------------
 echo "==> Installing CLI tools..."
-
-# core set (both macOS + Linux)
 brew install \
   git \
   fzf \
@@ -84,7 +88,7 @@ brew install \
 
 # Linux clipboard helpers
 if [[ "$OS" != "Darwin" ]]; then
-  brew install xclip wl-clipboard || true
+  brew install xclip clipboard || true
 fi
 
 # ----------------------------
@@ -126,8 +130,12 @@ fi
 # fzf keybindings & completions
 # ----------------------------
 echo "==> Enabling fzf keybindings & completions..."
-"$(brew --prefix)"/opt/fzf/install \
-  --key-bindings --completion --no-bash --no-fish --no-update-rc || true
+if [[ -x "$(brew --prefix)/opt/fzf/install" ]]; then
+  "$(brew --prefix)"/opt/fzf/install \
+    --key-bindings --completion --no-bash --no-fish --no-update-rc || true
+else
+  echo "-> Skipping fzf keybindings: fzf not installed."
+fi
 
 # ----------------------------
 # LazyVim bootstrap (optional)
