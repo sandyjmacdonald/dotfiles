@@ -1,6 +1,6 @@
-# ~/.zprofile  (login shells; platform setup)
+# ~/.zprofile — login shell setup (macOS/Linux)
 
-# Homebrew
+# Homebrew (macOS & Linux user-local)
 {{- if eq .chezmoi.os "darwin" -}}
   if [ -x /opt/homebrew/bin/brew ]; then eval "$(/opt/homebrew/bin/brew shellenv)"; fi
   if [ -x /usr/local/bin/brew ];  then eval "$(/usr/local/bin/brew shellenv)";  fi
@@ -8,9 +8,7 @@
   if [ -x "$HOME/.linuxbrew/bin/brew" ]; then eval "$("$HOME/.linuxbrew/bin/brew" shellenv)"; fi
 {{- end }}
 
-# ----------------------------
 # Conda (optional & resilient)
-# ----------------------------
 {{- $condaEnabled := default false (get . "conda_enabled") -}}
 {{- $condaPrefix  := default (dict "darwin" "/opt/miniconda3" "linux" (printf "%s/miniconda3" .chezmoi.homeDir)) (get . "conda_prefix") -}}
 {{- $hasConda     := or $condaEnabled (lookPath "conda") -}}
@@ -34,30 +32,5 @@
   {{- end -}}
 {{- end }}
 
-# ----------------------------
-# Cargo & SDKMAN (resilient)
-# ----------------------------
-[ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
-
-{{- $sdkmanEnabled := default false (get . "sdkman_enabled") -}}
-{{- if $sdkmanEnabled -}}
-  export SDKMAN_DIR="$HOME/.sdkman"
-  [ -s "$HOME/.sdkman/bin/sdkman-init.sh" ] && . "$HOME/.sdkman/bin/sdkman-init.sh"
-{{- end }}
-
-# (Optional) Linux cluster modules & HPC env
-{{- if eq .chezmoi.os "linux" -}}
-  {{- range (get . "modules" | default dict | get "load" | default (list)) }}
-  command -v module >/dev/null 2>&1 && module load {{ . }}
-  {{- end }}
-  {{- with (get . "hpc") }}
-  {{- with .NXF_HOME }}export NXF_HOME="{{ . }}"{{ end }}
-  {{- with .NXF_CONDA_CACHEDIR }}export NXF_CONDA_CACHEDIR="{{ . }}"{{ end }}
-  {{- with .NXF_TEMP }}export NXF_TEMP="{{ . }}"{{ end }}
-  {{- with .NXF_APPTAINER_CACHEDIR }}export NXF_APPTAINER_CACHEDIR="{{ . }}"{{ end }}
-  {{- with .NXF_SINGULARITY_CACHEDIR }}export NXF_SINGULARITY_CACHEDIR="{{ . }}"{{ end }}
-  {{- with .APPTAINER_TMPDIR }}export APPTAINER_TMPDIR="{{ . }}"{{ end }}
-  {{- with .APPTAINER_CACHEDIR }}export APPTAINER_CACHEDIR="{{ . }}"{{ end }}
-  {{- with .USER_ACCOUNT }}export USER_ACCOUNT="{{ . }}"{{ end }}
-  {{- end }}
-{{- end }}
+# Ensure interactive settings load too
+[[ -o interactive ]] && [ -f "$HOME/.zshrc" ] && source "$HOME/.zshrc"
