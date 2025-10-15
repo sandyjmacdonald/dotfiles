@@ -2,33 +2,46 @@
 [ -f "$HOME/.profile" ] && . "$HOME/.profile"
 
 # Homebrew
-{{ if eq .chezmoi.os "darwin" -}}
+{{- if eq .chezmoi.os "darwin" -}}
   if [ -x /opt/homebrew/bin/brew ]; then eval "$(/opt/homebrew/bin/brew shellenv)"; fi
   if [ -x /usr/local/bin/brew ]; then eval "$(/usr/local/bin/brew shellenv)"; fi
-{{ else -}}
+{{- else -}}
   if [ -x "$HOME/.linuxbrew/bin/brew" ]; then eval "$("$HOME/.linuxbrew/bin/brew" shellenv)"; fi
-{{ end }}
-
-# Conda (optional)
-{{- if .conda_enabled -}}
-  {{ if eq .chezmoi.os "darwin" -}}
-    if [ -f "{{ (index .conda_prefix "darwin") }}/etc/profile.d/conda.sh" ]; then
-      . "{{ (index .conda_prefix "darwin") }}/etc/profile.d/conda.sh"
-    elif [ -x "{{ (index .conda_prefix "darwin") }}/bin/conda" ]; then
-      eval "$("{{ (index .conda_prefix "darwin") }}/bin/conda" shell.bash hook)"
-    fi
-  {{ else -}}
-    if [ -f "{{ (index .conda_prefix "linux") }}/etc/profile.d/conda.sh" ]; then
-      . "{{ (index .conda_prefix "linux") }}/etc/profile.d/conda.sh"
-    elif [ -x "{{ (index .conda_prefix "linux") }}/bin/conda" ]; then
-      eval "$("{{ (index .conda_prefix "linux") }}/bin/conda" shell.bash hook)"
-    fi
-  {{ end -}}
 {{- end }}
 
-# Cargo & SDKMAN
+# ----------------------------
+# Conda (optional & resilient)
+# ----------------------------
+{{- $condaEnabled := default false (get . "conda_enabled") -}}
+{{- $condaPrefix := default (dict "darwin" "/opt/miniconda3" "linux" "$HOME/miniconda3") (get . "conda_prefix") -}}
+{{- $hasConda := or $condaEnabled (lookPath "conda") -}}
+{{- if $hasConda -}}
+  {{- if eq .chezmoi.os "darwin" -}}
+    if [ -f "{{ index $condaPrefix "darwin" }}/etc/profile.d/conda.sh" ]; then
+      . "{{ index $condaPrefix "darwin" }}/etc/profile.d/conda.sh"
+    elif [ -x "{{ index $condaPrefix "darwin" }}/bin/conda" ]; then
+      eval "$("{{ index $condaPrefix "darwin" }}/bin/conda" shell.bash hook)"
+    elif command -v conda >/dev/null 2>&1; then
+      eval "$(conda shell.bash hook)"
+    fi
+  {{- else -}}
+    if [ -f "{{ index $condaPrefix "linux" }}/etc/profile.d/conda.sh" ]; then
+      . "{{ index $condaPrefix "linux" }}/etc/profile.d/conda.sh"
+    elif [ -x "{{ index $condaPrefix "linux" }}/bin/conda" ]; then
+      eval "$("{{ index $condaPrefix "linux" }}/bin/conda" shell.bash hook)"
+    elif command -v conda >/dev/null 2>&1; then
+      eval "$(conda shell.bash hook)"
+    fi
+  {{- end -}}
+{{- end }}
+
+# ----------------------------
+# Cargo & SDKMAN (resilient)
+# ----------------------------
 [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
-{{- if .sdkman_enabled -}}
+
+{{- $sdkmanEnabled := default false (get . "sdkman_enabled") -}}
+{{- if $sdkmanEnabled -}}
   export SDKMAN_DIR="$HOME/.sdkman"
   [ -s "$HOME/.sdkman/bin/sdkman-init.sh" ] && . "$HOME/.sdkman/bin/sdkman-init.sh"
 {{- end }}
