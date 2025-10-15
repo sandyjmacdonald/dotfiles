@@ -35,3 +35,6 @@ command -v starship >/dev/null 2>&1 && eval "$(starship init zsh)"
 
 # Shared aliases & functions (used by zsh AND bash)
 [ -f "$HOME/.config/shell/common.sh" ] && source "$HOME/.config/shell/common.sh"
+
+# Load shared aliases last so nothing clobbers them
+[ -f "$HOME/.config/shell/aliases.sh" ] && source "$HOME/.config/shell/aliases.sh"
