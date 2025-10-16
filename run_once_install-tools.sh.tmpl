@@ -59,6 +59,7 @@ else
   # Determine if this is a Viking node
   if echo "$HOSTNAME" | grep -qi 'viking'; then
     echo "==> Viking HPC detected — skipping Neovim install (provided via module)."
+    module load Neovim/0.11.4-GCCcore-13.2.0
   else
     echo "==> Non-Viking Linux detected — will install Neovim via Homebrew."
 
