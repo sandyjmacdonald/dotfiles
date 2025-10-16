@@ -1,6 +1,6 @@
 # ~/.zprofile — login shell setup (macOS/Linux)
 
-# Viking HPC: ensure modules exist and load Neovim
+# ---- Viking HPC: ensure modules exist and load Neovim (runtime detection) ----
 if [ "$(uname -s)" = "Linux" ]; then
   host_lc="$(hostname 2>/dev/null | tr '[:upper:]' '[:lower:]')"
   if [[ "$host_lc" == *viking* ]]; then
@@ -13,37 +13,36 @@ if [ "$(uname -s)" = "Linux" ]; then
   fi
 fi
 
-# Homebrew (macOS & Linux user-local)
-{{- if eq .chezmoi.os "darwin" -}}
-  if [ -x /opt/homebrew/bin/brew ]; then eval "$(/opt/homebrew/bin/brew shellenv)"; fi
-  if [ -x /usr/local/bin/brew ];  then eval "$(/usr/local/bin/brew shellenv)";  fi
-{{- else -}}
-  if [ -x "$HOME/.linuxbrew/bin/brew" ]; then eval "$("$HOME/.linuxbrew/bin/brew" shellenv)"; fi
-{{- end }}
+# ---- Homebrew env (macOS + Linuxbrew if present) ----
+{{ if eq .chezmoi.os "darwin" }}
+if [ -x /opt/homebrew/bin/brew ]; then
+  eval "$(/opt/homebrew/bin/brew shellenv)"
+elif [ -x /usr/local/bin/brew ]; then
+  eval "$(/usr/local/bin/brew shellenv)"
+fi
+{{ else }}
+if [ -x "$HOME/.linuxbrew/bin/brew" ]; then
+  eval "$("$HOME/.linuxbrew/bin/brew" shellenv)"
+fi
+{{ end }}
 
-# Conda (optional & resilient)
-{{- $condaEnabled := default false (get . "conda_enabled") -}}
-{{- $condaPrefix  := default (dict "darwin" "/opt/miniconda3" "linux" (printf "%s/miniconda3" .chezmoi.homeDir)) (get . "conda_prefix") -}}
-{{- $hasConda     := or $condaEnabled (lookPath "conda") -}}
-{{- if $hasConda -}}
-  {{- if eq .chezmoi.os "darwin" -}}
-    if [ -f "{{ index $condaPrefix "darwin" }}/etc/profile.d/conda.sh" ]; then
-      . "{{ index $condaPrefix "darwin" }}/etc/profile.d/conda.sh"
-    elif [ -x "{{ index $condaPrefix "darwin" }}/bin/conda" ]; then
-      eval "$("{{ index $condaPrefix "darwin" }}/bin/conda" shell.zsh hook)"
-    elif command -v conda >/dev/null 2>&1; then
-      eval "$(conda shell.zsh hook)"
-    fi
-  {{- else -}}
-    if [ -f "{{ index $condaPrefix "linux" }}/etc/profile.d/conda.sh" ]; then
-      . "{{ index $condaPrefix "linux" }}/etc/profile.d/conda.sh"
-    elif [ -x "{{ index $condaPrefix "linux" }}/bin/conda" ]; then
-      eval "$("{{ index $condaPrefix "linux" }}/bin/conda" shell.zsh hook)"
-    elif command -v conda >/dev/null 2>&1; then
-      eval "$(conda shell.zsh hook)"
-    fi
-  {{- end -}}
-{{- end }}
+# ---- Conda (optional & resilient) ----
+# Try common locations first, then fall back to whatever "conda" is on PATH.
+if [ -f "/opt/apps/eb/software/Miniconda3/23.5.2-0/etc/profile.d/conda.sh" ]; then
+  . "/opt/apps/eb/software/Miniconda3/23.5.2-0/etc/profile.d/conda.sh"
+elif [ -x "/opt/apps/eb/software/Miniconda3/23.5.2-0/bin/conda" ]; then
+  eval "$("/opt/apps/eb/software/Miniconda3/23.5.2-0/bin/conda" shell.zsh hook)"
+elif [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then
+  . "$HOME/miniconda3/etc/profile.d/conda.sh"
+elif [ -x "$HOME/miniconda3/bin/conda" ]; then
+  eval "$("$HOME/miniconda3/bin/conda" shell.zsh hook)"
+elif command -v conda >/dev/null 2>&1; then
+  eval "$(conda shell.zsh hook)"
+fi
 
-# Ensure interactive settings load too
-[[ -o interactive ]] && [ -f "$HOME/.zshrc" ] && source "$HOME/.zshrc"
+# ---- Prompt & navigation (safe if missing) ----
+command -v zoxide  >/dev/null 2>&1 && eval "$(zoxide init zsh)"
+command -v starship >/dev/null 2>&1 && eval "$(starship init zsh)"
+
+# ---- Ensure interactive settings load too ----
+[[ -o interactive ]] && [ -f "$HOME/.zshrc" ] && . "$HOME/.zshrc"
