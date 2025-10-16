@@ -1,6 +1,18 @@
 # Bash login shells
 [ -f "$HOME/.profile" ] && . "$HOME/.profile"
 
+{{ if and (eq .chezmoi.os "linux") (contains .chezmoi.hostname "viking") -}}
+# Load zsh module (if available)
+if command -v module >/dev/null 2>&1; then
+  module load zsh/5.8-GCC-8.3.0 || true
+fi
+
+# Switch to zsh login shell once (avoid loop if already in zsh)
+if [ -x "$(command -v zsh)" ] && [ -z "${ZSH_VERSION-}" ]; then
+  exec zsh -l
+fi
+{{- end }}
+
 # Homebrew
 {{- if eq .chezmoi.os "darwin" -}}
   if [ -x /opt/homebrew/bin/brew ]; then eval "$(/opt/homebrew/bin/brew shellenv)"; fi
