@@ -1,9 +1,0 @@
-#!/usr/bin/env bash
-
-set -euo pipefail
-dest="$HOME/.config/tmux/plugins/catppuccin/tmux"
-if [ ! -d "$dest" ]; then
-  mkdir -p "$dest"
-  # Pin to a release tag from the README (update when you want)
-  git clone -b v2.1.3 https://github.com/catppuccin/tmux.git "$dest"
-fi
