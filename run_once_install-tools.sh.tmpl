@@ -147,6 +147,16 @@ else
 
 fi # end OS branch
 
+# ----------------------------
+# Tmux Plugin Manager (TPM)
+# ----------------------------
+if [ ! -d "$HOME/.tmux/plugins/tpm" ]; then
+  echo "==> Installing TPM (Tmux Plugin Manager)..."
+  git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
+else
+  echo "==> TPM already installed."
+fi
+
 # =========================================================
 # LazyVim bootstrap (always)
 # =========================================================
