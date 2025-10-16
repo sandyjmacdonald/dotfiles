@@ -33,20 +33,22 @@ fi
 # ----------------------------
 # Viking HPC: load zsh via module and switch to zsh (login shell)
 # ----------------------------
-{{ if and (eq .chezmoi.os "linux") (contains (lower .chezmoi.hostname) "viking") -}}
-# Initialise environment modules (Lmod/Modules), whichever exists
-for f in /etc/profile.d/lmod.sh /etc/profile.d/modules.sh /usr/share/Modules/init/bash; do
-  [ -f "$f" ] && . "$f"
-done
-
-# Load zsh module if available, then switch to zsh login shell once
-if command -v module >/dev/null 2>&1; then
-  module load zsh/5.8-GCC-8.3.0 || true
+if [ "$(uname -s)" = "Linux" ]; then
+  host_lc="$(hostname 2>/dev/null | tr '[:upper:]' '[:lower:]')"
+  if [[ "$host_lc" == *viking* ]]; then
+    # Initialise environment modules (Lmod/Modules)
+    for f in /etc/profile.d/lmod.sh /etc/profile.d/modules.sh /usr/share/Modules/init/bash; do
+      [ -f "$f" ] && . "$f"
+    done
+    # Load zsh module, then exec into zsh once
+    if command -v module >/dev/null 2>&1; then
+      module load zsh/5.8-GCC-8.3.0 || true
+    fi
+    if command -v zsh >/dev/null 2>&1 && [ -z "${ZSH_VERSION-}" ]; then
+      exec zsh -l
+    fi
+  fi
 fi
-if command -v zsh >/dev/null 2>&1 && [ -z "${ZSH_VERSION-}" ]; then
-  exec zsh -l
-fi
-{{- end }}
 
 # ----------------------------
 # Cargo & SDKMAN (resilient)
