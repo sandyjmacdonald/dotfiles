@@ -2,11 +2,12 @@
 set -euo pipefail
 
 OS="$(uname -s)"
-echo "==> dev-setup: starting on $OS..."
+HOSTNAME="$(hostname)"
+echo "==> dev-setup: starting on $OS ($HOSTNAME)..."
 
 mkdir -p "$HOME/.local/bin" "$HOME/.local/opt"
 
-# --- helpers (Linux binary installs) ---
+# Helper to install single binaries from GitHub
 install_bin_from_tar() { # url inner_path target_name
   local url="$1" inner="$2" target="$3"
   local tmp; tmp="$(mktemp -d)"
@@ -20,19 +21,18 @@ install_bin_from_tar() { # url inner_path target_name
 }
 
 # =========================================================
-# macOS (Homebrew) installs
+# macOS (Homebrew)
 # =========================================================
 if [[ "$OS" == "Darwin" ]]; then
   if ! command -v brew >/dev/null 2>&1; then
     echo "==> Installing Homebrew (macOS)..."
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
   fi
-  if [[ -d "/opt/homebrew/bin" ]]; then
+
+  if [[ -x /opt/homebrew/bin/brew ]]; then
     eval "$(/opt/homebrew/bin/brew shellenv)"
-  elif [[ -d "/usr/local/bin" ]]; then
+  elif [[ -x /usr/local/bin/brew ]]; then
     eval "$(/usr/local/bin/brew shellenv)"
-  else
-    eval "$(brew shellenv)"
   fi
 
   echo "==> brew update..."
@@ -47,30 +47,69 @@ if [[ "$OS" == "Darwin" ]]; then
   brew install --cask font-jetbrains-mono-nerd-font || true
 
   echo "==> Enabling fzf keybindings & completion..."
-  "$(brew --prefix)"/opt/fzf/install --key-bindings --completion --no-bash --no-fish --no-update-rc || true
+  if [[ -x "$(brew --prefix)/opt/fzf/install" ]]; then
+    "$(brew --prefix)"/opt/fzf/install --key-bindings --completion --no-bash --no-fish --no-update-rc || true
+  fi
 
+
+# =========================================================
+# Linux (split: Viking HPC vs other hosts)
+# =========================================================
 else
-# =========================================================
-# Linux (HPC-friendly): prebuilt binaries only
-# =========================================================
+  # Determine if this is a Viking node
+  if echo "$HOSTNAME" | grep -qi 'viking'; then
+    echo "==> Viking HPC detected — skipping Neovim install (provided via module)."
+  else
+    echo "==> Non-Viking Linux detected — will install Neovim via Homebrew."
+
+    # Ensure Linuxbrew exists
+    if ! command -v brew >/dev/null 2>&1; then
+      echo "==> Installing Homebrew (Linux user-local ~/.linuxbrew)..."
+      export HOMEBREW_PREFIX="$HOME/.linuxbrew"
+      export HOMEBREW_REPOSITORY="$HOMEBREW_PREFIX/Homebrew"
+      export HOMEBREW_CELLAR="$HOMEBREW_PREFIX/Cellar"
+      mkdir -p "$HOMEBREW_PREFIX"/{bin,Cellar}
+      if [[ ! -d "$HOMEBREW_REPOSITORY" ]]; then
+        git clone --depth=1 https://github.com/Homebrew/brew "$HOMEBREW_REPOSITORY"
+      fi
+      ln -sf "$HOMEBREW_REPOSITORY/bin/brew" "$HOMEBREW_PREFIX/bin/brew"
+      export PATH="$HOMEBREW_PREFIX/bin:$PATH"
+      eval "$("$HOMEBREW_PREFIX/bin/brew" shellenv)"
+      export HOMEBREW_NO_ANALYTICS=1
+      export HOMEBREW_NO_INSTALL_CLEANUP=1
+    else
+      eval "$(brew shellenv)"
+    fi
+
+    echo "==> brew update..."
+    brew update || true
+
+    echo "==> Installing CLI tools (Linuxbrew)..."
+    brew install \
+      neovim git fzf bat fd ripgrep zoxide lazygit btop starship tldr eza yazi dust duf jq csvkit gping tmux \
+      zsh-autosuggestions zsh-syntax-highlighting zsh-history-substring-search doggo || true
+
+    echo "==> Enabling fzf keybindings & completion..."
+    if [[ -x "$(brew --prefix)/opt/fzf/install" ]]; then
+      "$(brew --prefix)"/opt/fzf/install --key-bindings --completion --no-bash --no-fish --no-update-rc || true
+    fi
+  fi
+
   echo "==> Installing Linux user-local binaries into ~/.local/bin"
 
-  # ripgrep 14.1.1
+  # Core utilities that always install even on HPC
   install_bin_from_tar \
     "https://github.com/BurntSushi/ripgrep/releases/download/14.1.1/ripgrep-14.1.1-x86_64-unknown-linux-musl.tar.gz" \
     "ripgrep-14.1.1-x86_64-unknown-linux-musl/rg" rg
 
-  # fd 10.2.0
   install_bin_from_tar \
     "https://github.com/sharkdp/fd/releases/download/v10.2.0/fd-v10.2.0-x86_64-unknown-linux-gnu.tar.gz" \
     "fd-v10.2.0-x86_64-unknown-linux-gnu/fd" fd
 
-  # bat 0.24.0
   install_bin_from_tar \
     "https://github.com/sharkdp/bat/releases/download/v0.24.0/bat-v0.24.0-x86_64-unknown-linux-gnu.tar.gz" \
     "bat-v0.24.0-x86_64-unknown-linux-gnu/bat" bat
 
-  # eza (latest stable “latest/download”)
   tmpd="$(mktemp -d)"
   curl -fsSL "https://github.com/eza-community/eza/releases/latest/download/eza_x86_64-unknown-linux-gnu.tar.gz" -o "$tmpd/eza.tgz"
   tar -xzf "$tmpd/eza.tgz" -C "$tmpd"
@@ -78,12 +117,10 @@ else
   rm -rf "$tmpd"
   echo "-> Installed: $HOME/.local/bin/eza"
 
-  # lazygit 0.55.1
   install_bin_from_tar \
     "https://github.com/jesseduffield/lazygit/releases/download/v0.55.1/lazygit_0.55.1_linux_x86_64.tar.gz" \
     "lazygit" lazygit
 
-  # btop 1.4.5 (static musl)
   tmpd="$(mktemp -d)"
   curl -fsSL "https://sourceforge.net/projects/btop.mirror/files/v1.4.5/btop-x86_64-linux-musl.tbz/download" -o "$tmpd/btop.tbz"
   tar -xjf "$tmpd/btop.tbz" -C "$tmpd"
@@ -91,34 +128,28 @@ else
   rm -rf "$tmpd"
   echo "-> Installed: $HOME/.local/bin/btop"
 
-  # duf 0.9.1
   install_bin_from_tar \
     "https://github.com/muesli/duf/releases/download/v0.9.1/duf_0.9.1_linux_x86_64.tar.gz" \
     "duf" duf
 
-  # dust 1.2.3
   install_bin_from_tar \
     "https://github.com/bootandy/dust/releases/download/v1.2.3/dust-v1.2.3-x86_64-unknown-linux-gnu.tar.gz" \
     "dust-v1.2.3-x86_64-unknown-linux-gnu/dust" dust
 
-  # gping 1.20.1 (GNU build)
   install_bin_from_tar \
     "https://github.com/orf/gping/releases/download/gping-v1.20.1/gping-Linux-gnu-x86_64.tar.gz" \
     "gping" gping
 
-  # jq (fallback if missing)
   if ! command -v jq >/dev/null 2>&1; then
     curl -fsSL -o "$HOME/.local/bin/jq" "https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64"
     chmod +x "$HOME/.local/bin/jq"
     echo "-> Installed: $HOME/.local/bin/jq"
   fi
 
-  # starship (official installer; install into ~/.local/bin)
   if ! command -v starship >/dev/null 2>&1; then
     curl -fsSL https://starship.rs/install.sh | sh -s -- -y -b "$HOME/.local/bin"
   fi
 
-  # zoxide 0.9.8 (musl = portable)
   tmpd="$(mktemp -d)"
   curl -fsSL "https://github.com/ajeetdsouza/zoxide/releases/download/v0.9.8/zoxide-0.9.8-x86_64-unknown-linux-musl.tar.gz" -o "$tmpd/zx.tar.gz"
   tar -xzf "$tmpd/zx.tar.gz" -C "$tmpd"
@@ -126,26 +157,11 @@ else
   rm -rf "$tmpd"
   echo "-> Installed: $HOME/.local/bin/zoxide"
 
-  # fzf (git + built-in installer gives keybindings/completion)
   if [[ ! -d "$HOME/.fzf" ]]; then
     git clone --depth 1 https://github.com/junegunn/fzf.git "$HOME/.fzf"
   fi
   "$HOME/.fzf/install" --key-bindings --completion --no-bash --no-fish --no-update-rc || true
-
-  # Neovim (AppImage v0.9.5, good for glibc 2.28) — extracted to avoid FUSE
-  if ! command -v nvim >/dev/null 2>&1; then
-    echo "==> Installing Neovim AppImage 0.9.5"
-    mkdir -p "$HOME/.local/opt/nvim-appimage"
-    cd "$HOME/.local/opt/nvim-appimage"
-    if [[ ! -f nvim.appimage ]]; then
-      curl -fsSL -O "https://github.com/neovim/neovim/releases/download/v0.9.5/nvim.appimage"
-      chmod +x nvim.appimage
-      ./nvim.appimage --appimage-extract
-      ln -sfn "$PWD/squashfs-root/usr/bin/nvim" "$HOME/.local/bin/nvim"
-    fi
-  fi
-
-fi # end OS branch
+fi
 
 # ----------------------------
 # Tmux Plugin Manager (TPM)
@@ -169,10 +185,11 @@ fi
 git clone https://github.com/LazyVim/starter "$HOME/.config/nvim"
 rm -rf "$HOME/.config/nvim/.git"
 
-# Pre-warm plugins (best-effort; skip if network locked down)
 if command -v nvim >/dev/null 2>&1; then
   echo "==> Syncing LazyVim plugins headlessly (best effort)…"
   NVIM_APPNAME=nvim nvim --headless "+Lazy! sync" +qa || true
+else
+  echo "-> Skipping LazyVim headless sync (Neovim not available — expected on Viking HPC until module loads)."
 fi
 
 echo "==> dev-setup complete."
