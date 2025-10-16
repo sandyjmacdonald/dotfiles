@@ -1,50 +1,51 @@
 # Bash login shells
 [ -f "$HOME/.profile" ] && . "$HOME/.profile"
 
-{{ if and (eq .chezmoi.os "linux") (contains .chezmoi.hostname "viking") -}}
-# Load zsh module (if available)
-if command -v module >/dev/null 2>&1; then
-  module load zsh/5.8-GCC-8.3.0 || true
-fi
-
-# Switch to zsh login shell once (avoid loop if already in zsh)
-if [ -x "$(command -v zsh)" ] && [ -z "${ZSH_VERSION-}" ]; then
-  exec zsh -l
-fi
-{{- end }}
-
-# Homebrew
-{{- if eq .chezmoi.os "darwin" -}}
-  if [ -x /opt/homebrew/bin/brew ]; then eval "$(/opt/homebrew/bin/brew shellenv)"; fi
-  if [ -x /usr/local/bin/brew ]; then eval "$(/usr/local/bin/brew shellenv)"; fi
-{{- else -}}
-  if [ -x "$HOME/.linuxbrew/bin/brew" ]; then eval "$("$HOME/.linuxbrew/bin/brew" shellenv)"; fi
-{{- end }}
+# ----------------------------
+# Homebrew (Linuxbrew) — only if present
+# ----------------------------
+{{ if eq .chezmoi.os "darwin" -}}
+  # macOS: brew is set in zprofile usually, but safe to eval if present
+  if [ -x /opt/homebrew/bin/brew ]; then
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+  elif [ -x /usr/local/bin/brew ]; then
+    eval "$(/usr/local/bin/brew shellenv)"
+  fi
+{{ else -}}
+  # Linux: user-local Linuxbrew (if present)
+  if [ -x "$HOME/.linuxbrew/bin/brew" ]; then
+    eval "$("$HOME/.linuxbrew/bin/brew" shellenv)"
+  fi
+{{ end }}
 
 # ----------------------------
 # Conda (optional & resilient)
 # ----------------------------
-{{- $condaEnabled := default false (get . "conda_enabled") -}}
-{{- $condaPrefix := default (dict "darwin" "/opt/miniconda3" "linux" "$HOME/miniconda3") (get . "conda_prefix") -}}
-{{- $hasConda := or $condaEnabled (lookPath "conda") -}}
-{{- if $hasConda -}}
-  {{- if eq .chezmoi.os "darwin" -}}
-    if [ -f "{{ index $condaPrefix "darwin" }}/etc/profile.d/conda.sh" ]; then
-      . "{{ index $condaPrefix "darwin" }}/etc/profile.d/conda.sh"
-    elif [ -x "{{ index $condaPrefix "darwin" }}/bin/conda" ]; then
-      eval "$("{{ index $condaPrefix "darwin" }}/bin/conda" shell.bash hook)"
-    elif command -v conda >/dev/null 2>&1; then
-      eval "$(conda shell.bash hook)"
-    fi
-  {{- else -}}
-    if [ -f "{{ index $condaPrefix "linux" }}/etc/profile.d/conda.sh" ]; then
-      . "{{ index $condaPrefix "linux" }}/etc/profile.d/conda.sh"
-    elif [ -x "{{ index $condaPrefix "linux" }}/bin/conda" ]; then
-      eval "$("{{ index $condaPrefix "linux" }}/bin/conda" shell.bash hook)"
-    elif command -v conda >/dev/null 2>&1; then
-      eval "$(conda shell.bash hook)"
-    fi
-  {{- end -}}
+# Try well-known install roots first, then fall back to "conda shell.bash hook" if on PATH
+if [ -f "/opt/apps/eb/software/Miniconda3/23.5.2-0/etc/profile.d/conda.sh" ]; then
+  . "/opt/apps/eb/software/Miniconda3/23.5.2-0/etc/profile.d/conda.sh"
+elif [ -x "/opt/apps/eb/software/Miniconda3/23.5.2-0/bin/conda" ]; then
+  eval "$("/opt/apps/eb/software/Miniconda3/23.5.2-0/bin/conda" shell.bash hook)"
+elif command -v conda >/dev/null 2>&1; then
+  eval "$(conda shell.bash hook)"
+fi
+
+# ----------------------------
+# Viking HPC: load zsh via module and switch to zsh (login shell)
+# ----------------------------
+{{ if and (eq .chezmoi.os "linux") (contains (lower .chezmoi.hostname) "viking") -}}
+# Initialise environment modules (Lmod/Modules), whichever exists
+for f in /etc/profile.d/lmod.sh /etc/profile.d/modules.sh /usr/share/Modules/init/bash; do
+  [ -f "$f" ] && . "$f"
+done
+
+# Load zsh module if available, then switch to zsh login shell once
+if command -v module >/dev/null 2>&1; then
+  module load zsh/5.8-GCC-8.3.0 || true
+fi
+if command -v zsh >/dev/null 2>&1 && [ -z "${ZSH_VERSION-}" ]; then
+  exec zsh -l
+fi
 {{- end }}
 
 # ----------------------------
@@ -52,11 +53,11 @@ fi
 # ----------------------------
 [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
 
-{{- $sdkmanEnabled := default false (get . "sdkman_enabled") -}}
-{{- if $sdkmanEnabled -}}
-  export SDKMAN_DIR="$HOME/.sdkman"
-  [ -s "$HOME/.sdkman/bin/sdkman-init.sh" ] && . "$HOME/.sdkman/bin/sdkman-init.sh"
-{{- end }}
+# SDKMAN (optional)
+export SDKMAN_DIR="$HOME/.sdkman"
+[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ] && . "$HOME/.sdkman/bin/sdkman-init.sh"
 
+# ----------------------------
 # Finally, interactive settings
+# ----------------------------
 [ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc"
