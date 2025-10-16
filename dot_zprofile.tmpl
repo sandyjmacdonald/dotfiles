@@ -4,11 +4,23 @@
 if [ "$(uname -s)" = "Linux" ]; then
   host_lc="$(hostname 2>/dev/null | tr '[:upper:]' '[:lower:]')"
   if [[ "$host_lc" == *viking* ]]; then
-    for f in /etc/profile.d/lmod.sh /etc/profile.d/modules.sh /usr/share/Modules/init/zsh; do
+    # Initialize modules (Lmod / Environment Modules)
+    for f in \
+      /etc/profile.d/lmod.sh \
+      /etc/profile.d/modules.sh \
+      /usr/share/Modules/init/zsh \
+      /usr/share/Modules/init/profile.zsh \
+      /usr/share/lmod/lmod/init/zsh \
+      /usr/share/lmod/lmod/init/profile; do
       [ -f "$f" ] && . "$f"
     done
-    if command -v module >/dev/null 2>&1 && ! command -v nvim >/dev/null 2>&1; then
-      module load Neovim/0.11.4-GCCcore-13.2.0 || true
+
+    if command -v module >/dev/null 2>&1; then
+      # Only load if that exact Neovim is available
+      if module -t avail 2>&1 | grep -qE '^Neovim/0\.11\.4'; then
+        module load Neovim/0.11.4-GCCcore-13.2.0 >/dev/null 2>&1 || true
+        hash -r   # refresh zsh’s command cache so 'nvim' is picked up
+      fi
     fi
   fi
 fi
