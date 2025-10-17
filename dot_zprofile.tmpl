@@ -1,7 +1,5 @@
 # ~/.zprofile — login shell setup (macOS/Linux)
 
-fastfetch
-
 # ---- Viking HPC: ensure modules exist and load Neovim (runtime detection) ----
 if [ "$(uname -s)" = "Linux" ]; then
   host_lc="$(hostname 2>/dev/null | tr '[:upper:]' '[:lower:]')"
@@ -29,6 +27,7 @@ fi
 
 # ---- Homebrew env (macOS + Linuxbrew if present) ----
 {{ if eq .chezmoi.os "darwin" }}
+  fastfetch
 if [ -x /opt/homebrew/bin/brew ]; then
   eval "$(/opt/homebrew/bin/brew shellenv)"
 elif [ -x /usr/local/bin/brew ]; then
