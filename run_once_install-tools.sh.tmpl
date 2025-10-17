@@ -88,7 +88,7 @@ else
     echo "==> Installing CLI tools (Linuxbrew)..."
     brew install \
       neovim git fzf bat fd ripgrep zoxide lazygit btop starship tldr eza yazi dust duf jq csvkit gping tmux \
-      zsh-autosuggestions zsh-syntax-highlighting zsh-history-substring-search doggo || true
+      zsh-autosuggestions zsh-syntax-highlighting zsh-history-substring-search doggo fastfetch || true
 
     echo "==> Enabling fzf keybindings & completion..."
     if [[ -x "$(brew --prefix)/opt/fzf/install" ]]; then
