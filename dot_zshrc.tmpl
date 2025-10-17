@@ -70,4 +70,11 @@ command -v starship >/dev/null 2>&1 && eval "$(starship init zsh)"
 [ -f "$HOME/.zshrc.local" ] && source "$HOME/.zshrc.local"
 ZRC
 
+# ---- Fastfetch (macOS only; run once per new terminal) ----
+{{ if eq .chezmoi.os "darwin" }}
+if [[ $- == *i* ]] && command -v fastfetch >/dev/null 2>&1; then
+  fastfetch
+fi
+{{ end }}
+
 exec zsh -l
