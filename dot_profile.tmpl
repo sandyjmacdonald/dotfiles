@@ -11,6 +11,9 @@ if [ "$(uname -s)" = "Linux" ]; then
       [ -f "$f" ] && . "$f"
     done
     command -v module >/dev/null 2>&1 && module load zsh/5.8-GCC-8.3.0 >/dev/null 2>&1 || true
+    flight set hints off
+    flight set welcome off
+    flight set secondary off
     exec zsh -l
   fi
 fi
