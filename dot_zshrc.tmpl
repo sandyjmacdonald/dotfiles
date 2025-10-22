@@ -1,5 +1,4 @@
-cp -p ~/.zshrc ~/.zshrc.broken-$(date +%F-%H%M%S) 2>/dev/null || true
-cat > ~/.zshrc <<'ZRC'
+# ~/.zshrc  — interactive shell config (managed by chezmoi)
 
 # ---- Viking HPC fallback for interactive non-login shells ----
 if [[ $- == *i* ]]; then
@@ -25,56 +24,59 @@ if [[ $- == *i* ]]; then
   fi
 fi
 
-# Minimal, resilient ~/.zshrc
-
-# Ensure Homebrew and ~/.local/bin are on PATH (even for non-login shells)
+# ---- Ensure Homebrew & ~/.local/bin are on PATH (even for non-login shells) ----
 [ -x /opt/homebrew/bin/brew ] && eval "$(/opt/homebrew/bin/brew shellenv)"
 [ -x /usr/local/bin/brew ]    && eval "$(/usr/local/bin/brew shellenv)"
 case ":$PATH:" in (*":$HOME/.local/bin:"*) ;; (*) export PATH="$HOME/.local/bin:$PATH" ;; esac
 
-# History
+# ---- History ----
 HISTFILE=${HISTFILE:-$HOME/.zsh_history}
 HISTSIZE=100000
 SAVEHIST=100000
 
-# Use Homebrew paths only if brew is available
+# ---- Plugins via Homebrew (guarded) ----
 if command -v brew >/dev/null 2>&1; then
   BREW_PREFIX="$(brew --prefix)"
   FPATH="$BREW_PREFIX/share/zsh/site-functions:${FPATH}"
 
-  # Plugins (order matters)
+  # 1) autosuggestions
   [ -f "$BREW_PREFIX/share/zsh-autosuggestions/zsh-autosuggestions.zsh" ] \
     && source "$BREW_PREFIX/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
 
+  # 2) history-substring-search (+ keys)
   if [ -f "$BREW_PREFIX/share/zsh-history-substring-search/zsh-history-substring-search.zsh" ]; then
     source "$BREW_PREFIX/share/zsh-history-substring-search/zsh-history-substring-search.zsh"
     bindkey '^[[A' history-substring-search-up
     bindkey '^[[B' history-substring-search-down
   fi
 
+  # 3) syntax-highlighting last
   [ -f "$BREW_PREFIX/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ] \
     && source "$BREW_PREFIX/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
 fi
 
-# fzf keybindings/completions (if installed)
+# ---- fzf keybindings/completions ----
 [ -f "$HOME/.fzf.zsh" ] && source "$HOME/.fzf.zsh"
 
-# Prompt & navigation (guarded)
+# ---- Prompt & navigation ----
 command -v zoxide   >/dev/null 2>&1 && eval "$(zoxide init zsh)"
 command -v starship >/dev/null 2>&1 && eval "$(starship init zsh)"
 
-# Shared aliases & functions (your file)
+# ---- Shared aliases & functions ----
 [ -f "$HOME/.config/shell/aliases.sh" ] && source "$HOME/.config/shell/aliases.sh"
 
-# Optional local overrides not managed by chezmoi
+# ---- Optional local overrides not managed by chezmoi ----
 [ -f "$HOME/.zshrc.local" ] && source "$HOME/.zshrc.local"
-ZRC
 
-# ---- Fastfetch (macOS only; run once per new terminal) ----
+# ---- Fastfetch (macOS only; once per new local interactive terminal) ----
 {{ if eq .chezmoi.os "darwin" }}
 if [[ $- == *i* ]] && command -v fastfetch >/dev/null 2>&1; then
-  fastfetch
+  # Skip inside tmux or SSH sessions
+  if [[ -z ${TMUX-} && -z ${SSH_TTY-} ]]; then
+    if [[ -z ${FASTFETCH_SHOWN-} ]]; then
+      FASTFETCH_SHOWN=1
+      fastfetch 2>/dev/null || true
+    fi
+  fi
 fi
 {{ end }}
-
-exec zsh -l
